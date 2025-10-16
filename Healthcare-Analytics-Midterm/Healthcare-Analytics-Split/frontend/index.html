@@ -1,0 +1,182 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Healthcare Chatbot Analytics</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="container">
+  <h1>🏥 Healthcare Chatbot Analytics</h1>
+  
+  <div class="view-selector">
+    <button class="view-btn active" onclick="switchView('single')">🔍 Single Session</button>
+    <button class="view-btn" onclick="switchView('batch')">📊 Batch Analysis</button>
+  </div>
+
+  <!-- Single Session View -->
+  <div id="single-view" class="view">
+    <div class="card">
+      <div class="upload-section">
+        <h3>🔍 Single Session Analysis</h3>
+        <p>Upload or paste a single chatlog JSON for detailed analysis</p>
+        <textarea id="singleInput" placeholder="Paste your single chatlog JSON here..." style="width: 100%; height: 200px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border); border-radius: 12px; padding: 12px; color: var(--text); font-family: 'Inter', monospace; font-size: 13px; resize: vertical;"></textarea>
+        <br>
+        <button onclick="analyzeSingle()">🔍 Analyze Session</button>
+        <button onclick="loadSingleExample()" class="secondary">📋 Load Example</button>
+      </div>
+    </div>
+
+    <div id="single-results" class="card hidden">
+      <h3>📈 Session Analysis Results</h3>
+      <div class="kpis">
+        <div class="kpi tooltip">
+          <div class="kpi-label">Session ID</div>
+          <div class="kpi-value" id="single-session-id">–</div>
+          <span class="tooltiptext">Unique identifier for this conversation session</span>
+        </div>
+        <div class="kpi tooltip">
+          <div class="kpi-label">Completion Status</div>
+          <div class="kpi-value" id="single-completion">–</div>
+          <span class="tooltiptext">Whether the appointment booking was successfully completed or abandoned</span>
+        </div>
+        <div class="kpi tooltip">
+          <div class="kpi-label">Turns Count</div>
+          <div class="kpi-value" id="single-turns">–</div>
+          <span class="tooltiptext">Total number of back-and-forth messages in the conversation</span>
+        </div>
+        <div class="kpi tooltip">
+          <div class="kpi-label">Overall Score</div>
+          <div class="kpi-value" id="single-score">–</div>
+          <span class="tooltiptext">Weighted score based on satisfaction, coherence, relevance, consistency, adaptability, memory, and efficiency</span>
+        </div>
+      </div>
+      
+      <div class="grid">
+        <div>
+          <h4>📊 Rubric Breakdown</h4>
+          <canvas id="single-radar"></canvas>
+        </div>
+        <div>
+          <h4>📈 Session Metrics</h4>
+          <div class="kpis">
+            <div class="kpi tooltip">
+              <div class="kpi-label">User Sentiment</div>
+              <div class="kpi-value" id="single-sentiment">–</div>
+              <span class="tooltiptext">User's emotional tone based on their final message (positive, neutral, negative)</span>
+            </div>
+            <div class="kpi tooltip">
+              <div class="kpi-label">Efficiency</div>
+              <div class="kpi-value" id="single-efficiency">–</div>
+              <span class="tooltiptext">Score based on optimal conversation length (fewer turns = higher efficiency)</span>
+            </div>
+            <div class="kpi tooltip">
+              <div class="kpi-label">Errors</div>
+              <div class="kpi-value" id="single-errors">–</div>
+              <span class="tooltiptext">Number of invalid or unrecognized user inputs (like 'asdf', 'xyz')</span>
+            </div>
+            <div class="kpi tooltip">
+              <div class="kpi-label">Out-of-Scope</div>
+              <div class="kpi-value" id="single-oos">–</div>
+              <span class="tooltiptext">Number of queries outside the bot's capabilities (weather, jokes, etc.)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="timeline" id="single-timeline">
+        <h4>💬 Conversation Timeline</h4>
+        <div id="single-timeline-content">No conversation data available.</div>
+      </div>
+      
+      <div class="ai-insights" id="single-ai-insights">
+        <h4>🤖 AI Session Insights</h4>
+        <div id="single-ai-content">No analysis available yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Batch Analysis View -->
+  <div id="batch-view" class="view hidden">
+    <div class="card">
+      <div class="upload-section">
+        <h3>📊 Batch Analysis</h3>
+        <p>Upload a JSON file with multiple chatlogs for comprehensive analysis</p>
+        <input type="file" id="batchInput" accept=".json" style="margin: 16px 0; padding: 8px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border); border-radius: 8px; color: var(--text); width: 300px;">
+        <br>
+        <button onclick="analyzeBatch()">🚀 Analyze Batch</button>
+        <button onclick="loadBatchExample()" class="secondary">📋 Load Example</button>
+      </div>
+    </div>
+
+    <div id="batch-results" class="card hidden">
+      <h3>📈 Batch Analysis Results</h3>
+      <div class="kpis">
+        <div class="kpi tooltip">
+          <div class="kpi-label">✅ Task Success Rate</div>
+          <div class="kpi-value" id="batch-success">–</div>
+          <span class="tooltiptext">Percentage of sessions that successfully completed appointment booking</span>
+        </div>
+        <div class="kpi tooltip">
+          <div class="kpi-label">💬 Avg Conversation Length</div>
+          <div class="kpi-value" id="batch-turns">–</div>
+          <span class="tooltiptext">Average number of turns (messages) across all conversations</span>
+        </div>
+        <div class="kpi tooltip">
+          <div class="kpi-label">😊 Positive Sentiment Rate</div>
+          <div class="kpi-value" id="batch-sentiment">–</div>
+          <span class="tooltiptext">Percentage of sessions ending with positive user sentiment (thanks, great, perfect)</span>
+        </div>
+        <div class="kpi tooltip">
+          <div class="kpi-label">🎯 Avg Overall Score</div>
+          <div class="kpi-value" id="batch-score">–</div>
+          <span class="tooltiptext">Average weighted score across all rubric categories for all sessions</span>
+        </div>
+      </div>
+      
+      <div class="grid">
+        <div>
+          <h4>📊 Rubric Averages</h4>
+          <canvas id="batch-radar"></canvas>
+        </div>
+        <div>
+          <h4>📈 Booking Success Funnel</h4>
+          <canvas id="batch-funnel"></canvas>
+        </div>
+        <div style="margin-top: 24px;">
+          <h4>😊 Sentiment Breakdown</h4>
+          <canvas id="batch-sentiment-breakdown"></canvas>
+        </div>
+        <div style="margin-top: 24px;">
+          <h4>⏱️ Session Duration Analysis</h4>
+          <canvas id="batch-duration-analysis"></canvas>
+        </div>
+      </div>
+      
+      <div style="margin-top: 24px;">
+        <h4>☁️ Word Cloud - Common User Terms</h4>
+        <div class="word-cloud" id="wordCloud">
+          <div style="color: #94a3b8;">Upload data to see word cloud</div>
+        </div>
+      </div>
+      
+      <div class="ai-insights" id="batch-ai-insights">
+        <h4>🤖 AI System Insights</h4>
+        <div id="batch-ai-content">No analysis available yet.</div>
+      </div>
+      
+      <h3>📋 Session List - Click to View Individual Session</h3>
+      <div class="session-list" id="session-list">
+        <div style="color: #94a3b8;">No sessions loaded</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
+
