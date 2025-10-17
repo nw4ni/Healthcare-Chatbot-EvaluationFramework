@@ -138,6 +138,29 @@ button.secondary {
   color: var(--text);
 }
 
+/* KPI Alignment Fix */
+.kpis {
+  align-items: stretch;      /* make all boxes equal height */
+  grid-auto-rows: 1fr;       /* uniform height across rows */
+}
+
+.kpi {
+  display: flex;
+  flex-direction: column;    /* stack label + value vertically */
+  min-height: 120px;         
+}
+
+.kpi .kpi-label {
+  line-height: 1.2;
+  min-height: 32px;          
+}
+
+.kpi .kpi-value {
+  margin-top: auto;          /* push number to bottom */
+  line-height: 1;            
+}
+
+
 .grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

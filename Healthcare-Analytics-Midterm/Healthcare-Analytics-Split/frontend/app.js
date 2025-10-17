@@ -557,9 +557,9 @@ function displayBatchResults(analysis) {
 
 function renderRadarChart(canvasId, scores, label) {
   const ctx = document.getElementById(canvasId).getContext('2d');
-  
+
   if (charts[canvasId]) charts[canvasId].destroy();
-  
+
   charts[canvasId] = new Chart(ctx, {
     type: 'radar',
     data: {
@@ -570,30 +570,48 @@ function renderRadarChart(canvasId, scores, label) {
         backgroundColor: 'rgba(59, 130, 246, 0.2)',
         borderColor: 'rgba(59, 130, 246, 1)',
         pointBackgroundColor: 'rgba(59, 130, 246, 1)',
-        pointBorderColor: '#fff',
+        pointBorderColor: '#d2dcecff',
         pointHoverBackgroundColor: '#fff',
-        pointHoverBorderColor: 'rgba(59, 130, 246, 1)'
+        pointHoverBorderColor: 'transparent',
+        pointRadius: 4,
+        pointHoverRadius: 5
       }]
     },
     options: {
-      responsive: true,
+      responsive: true,               
       scales: {
         r: {
           beginAtZero: true,
-          max: 100
+          max: 100,
+          grid: { color: 'rgba(148,163,184,0.2)', circular: true },
+          angleLines: { color: 'rgba(148,163,184,0.2)' },
+          pointLabels: { color: '#f1f5f9', font: { size: 13, weight: '500' } },
+          ticks: {
+            color: 'rgba(235, 237, 240, 1)',   // number color (100, 90, etc)
+            showLabelBackdrop: false,         
+            backdropColor: 'transparent',     
+            stepSize: 20,
+            font: { size: 14 }
+          }
         }
       },
       plugins: {
+        legend: {
+          display: true,
+          labels: { color: '#f1f5f9', font: { size: 14 } }
+        },
         tooltip: {
+          backgroundColor: 'rgba(15,23,42,0.9)',
+          titleColor: '#f1f5f9',
+          bodyColor: '#f1f5f9',
+          borderColor: 'rgba(59,130,246,0.3)',
+          borderWidth: 1,
           callbacks: {
-            label: function(context) {
+            label: function (context) {
               const label = context.dataset.label || '';
               const value = context.parsed.r;
               const rubricName = context.label;
-              
               let tooltipText = `${label}: ${value}%`;
-              
-              // Add rubric explanations
               const explanations = {
                 'Satisfaction': 'How well the bot met user needs and expectations',
                 'Coherence': 'Logical flow and consistency of responses',
@@ -603,11 +621,7 @@ function renderRadarChart(canvasId, scores, label) {
                 'Memory': 'Retention of context across conversation',
                 'Efficiency': 'Achieving goals with minimal turns'
               };
-              
-              if (explanations[rubricName]) {
-                tooltipText += `\n${explanations[rubricName]}`;
-              }
-              
+              if (explanations[rubricName]) tooltipText += `\n${explanations[rubricName]}`;
               return tooltipText;
             }
           }
@@ -616,6 +630,7 @@ function renderRadarChart(canvasId, scores, label) {
     }
   });
 }
+
 
 function renderSessionList(sessions) {
   const container = document.getElementById('session-list');
