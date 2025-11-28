@@ -1,7 +1,8 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse, FileResponse, HTMLResponse
 from pydantic import BaseModel
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 import json
 import uvicorn
@@ -17,6 +18,40 @@ from experiments import ExperimentTracker, PipelineChange, ExperimentResult
 from reporting import ReportGenerator
 
 app = FastAPI(title="Healthcare Chatbot Analytics API", version="1.0.0")
+
+# ============ FRONTEND SERVING CONFIGURATION ============
+BASE_DIR = Path(__file__).resolve().parent.parent
+FRONTEND_DIR = BASE_DIR / "frontend"
+
+if FRONTEND_DIR.exists() and FRONTEND_DIR.is_dir():
+    print(f"✓ Frontend directory found: {FRONTEND_DIR}")
+else:
+    print(f"⚠ Warning: Frontend directory not found at {FRONTEND_DIR}")
+
+@app.get("/styles.css")
+async def serve_css():
+    """Serve CSS file"""
+    css_path = FRONTEND_DIR / "styles.css"
+    if css_path.exists():
+        return FileResponse(css_path, media_type="text/css")
+    raise HTTPException(status_code=404, detail="CSS file not found")
+
+@app.get("/app.js")
+async def serve_js():
+    """Serve JavaScript file"""
+    js_path = FRONTEND_DIR / "app.js"
+    if js_path.exists():
+        return FileResponse(js_path, media_type="application/javascript")
+    raise HTTPException(status_code=404, detail="JS file not found")
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for load balancer"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "version": "1.0.0"
+    }
 
 # Enable CORS for frontend
 app.add_middleware(
@@ -348,8 +383,21 @@ def analyze_batch_data(chatlogs: List[ChatSession]) -> BatchAnalysisResult:
     )
 
 # API Endpoints
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
+async def serve_dashboard():
+    """Serve the main dashboard HTML page"""
+    index_path = FRONTEND_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
+    else:
+        return HTMLResponse(
+            content="<h1>Dashboard not found</h1><p>Frontend files missing at: " + str(index_path) + "</p>",
+            status_code=200
+        )
+
+@app.get("/api")
 async def root():
+    """API information endpoint"""
     return {"message": "Healthcare Chatbot Analytics API", "version": "1.0.0"}
 
 @app.post("/evaluate", response_model=AnalysisResult)
