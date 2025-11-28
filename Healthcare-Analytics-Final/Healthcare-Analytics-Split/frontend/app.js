@@ -418,6 +418,7 @@ function analyzeBatchData(chatlogs) {
   let mediumSessions = 0; // 5-8 turns
   let longSessions = 0; // 9+ turns
   const wordFreq = {};
+  const wordCloudByTime = {};
   const rubricScores = {
     satisfaction: 0,
     coherence: 0, 
@@ -427,6 +428,11 @@ function analyzeBatchData(chatlogs) {
     memory: 0,
     efficiency: 0
   };
+  
+  let reschedulingCount = 0;
+  const appointmentTypes = {};
+  const knowledgeBaseGaps = [];
+  const trendDataByDate = {};
   
   chatlogs.forEach(session => {
     const analysis = analyzeSession(session);
@@ -445,13 +451,74 @@ function analyzeBatchData(chatlogs) {
     
     totalScore += analysis.overallScore;
     
-    // Word frequency analysis
+    // Detect rescheduling
+    const sessionText = session.turns.map(t => t.text || '').join(' ').toLowerCase();
+    if (sessionText.includes('reschedule') || sessionText.includes('rescheduling') || 
+        sessionText.includes('change appointment') || sessionText.includes('move appointment')) {
+      reschedulingCount++;
+    }
+    
+    // Detect appointment types
+    const specialties = ['cardiology', 'cardiac', 'heart', 'dermatology', 'skin', 'pediatrics', 'pediatric', 
+                         'child', 'orthopedics', 'orthopedic', 'bone', 'ent', 'ear', 'nose', 'throat', 
+                         'general', 'primary', 'flu', 'covid', 'vaccine', 'checkup', 'physical', 'dental', 'eye', 'vision'];
+    for (const specialty of specialties) {
+      if (sessionText.includes(specialty)) {
+        appointmentTypes[specialty] = (appointmentTypes[specialty] || 0) + 1;
+        break;
+      }
+    }
+    
+    // Track knowledge base gaps
+    session.turns.forEach(turn => {
+      if (turn.role === 'user' && turn.text) {
+        const oosKeywords = ['weather', 'joke', 'pizza', 'recipe', 'sports', 'news', 'stock', 'movie'];
+        if (oosKeywords.some(keyword => turn.text.toLowerCase().includes(keyword))) {
+          knowledgeBaseGaps.push({
+            query: turn.text,
+            session_id: session.id,
+            timestamp: session.timestamp,
+            suggested_topic: 'General information queries'
+          });
+        }
+      }
+    });
+    
+    // Word frequency analysis with time grouping
+    let monthKey = 'unknown';
+    try {
+      const sessionDate = new Date(session.timestamp);
+      monthKey = sessionDate.toISOString().substring(0, 7); // YYYY-MM
+    } catch (e) {
+      // Use unknown if date parsing fails
+    }
+    
+    if (!wordCloudByTime[monthKey]) {
+      wordCloudByTime[monthKey] = {};
+    }
+    
+    // Trend data by date
+    try {
+      const sessionDate = new Date(session.timestamp);
+      const dateKey = sessionDate.toISOString().substring(0, 10); // YYYY-MM-DD
+      if (!trendDataByDate[dateKey]) {
+        trendDataByDate[dateKey] = { sessions: 0, completed: 0 };
+      }
+      trendDataByDate[dateKey].sessions++;
+      if (analysis.completed) {
+        trendDataByDate[dateKey].completed++;
+      }
+    } catch (e) {
+      // Skip if date parsing fails
+    }
+    
     session.turns.forEach(turn => {
       if (turn.role === 'user' && turn.text) {
         const words = turn.text.toLowerCase().match(/\b\w+\b/g) || [];
         words.forEach(word => {
           if (word.length > 2 && !['the', 'and', 'you', 'for', 'are', 'with', 'this', 'that', 'have', 'from', 'can', 'will', 'would', 'could', 'should', 'please', 'thank', 'thanks'].includes(word)) {
             wordFreq[word] = (wordFreq[word] || 0) + 1;
+            wordCloudByTime[monthKey][word] = (wordCloudByTime[monthKey][word] || 0) + 1;
           }
         });
       }
@@ -466,6 +533,18 @@ function analyzeBatchData(chatlogs) {
   Object.keys(rubricScores).forEach(key => {
     rubricScores[key] = Math.round(rubricScores[key] / totalSessions);
   });
+  
+  // Process trend data
+  const sortedDates = Object.keys(trendDataByDate).sort();
+  const trendData = {
+    dates: sortedDates,
+    sessions: sortedDates.map(date => trendDataByDate[date].sessions),
+    completed: sortedDates.map(date => trendDataByDate[date].completed),
+    conversionRates: sortedDates.map(date => {
+      const data = trendDataByDate[date];
+      return data.sessions > 0 ? Math.round((data.completed / data.sessions) * 100 * 100) / 100 : 0;
+    })
+  };
   
   return {
     totalSessions: totalSessions,
@@ -482,7 +561,19 @@ function analyzeBatchData(chatlogs) {
     shortSessions: shortSessions,
     mediumSessions: mediumSessions,
     longSessions: longSessions,
-    sessions: chatlogs.map(session => analyzeSession(session))
+    sessions: chatlogs.map(session => analyzeSession(session)),
+    conversionRate: Math.round((completedSessions / totalSessions) * 100 * 100) / 100,
+    trafficMetrics: {
+      totalChats: totalSessions,
+      uniqueUsers: totalSessions,
+      avgSessionDuration: (totalTurns / totalSessions).toFixed(1),
+      bounceRate: Math.round(((totalSessions - completedSessions) / totalSessions) * 100 * 100) / 100
+    },
+    reschedulingCount: reschedulingCount,
+    appointmentTypes: appointmentTypes,
+    trendData: trendData,
+    knowledgeBaseGaps: knowledgeBaseGaps.slice(0, 20),
+    wordCloudByTime: wordCloudByTime
   };
 }
 
@@ -519,6 +610,20 @@ function displayBatchResults(analysis) {
   document.getElementById('batch-sentiment').textContent = analysis.sentimentRate + '%';
   document.getElementById('batch-score').textContent = analysis.overallScore + '%';
   
+  // Update new metrics if available
+  if (analysis.conversionRate !== undefined) {
+    const conversionEl = document.getElementById('batch-conversion');
+    if (conversionEl) conversionEl.textContent = analysis.conversionRate + '%';
+  }
+  if (analysis.reschedulingCount !== undefined) {
+    const rescheduleEl = document.getElementById('batch-rescheduling');
+    if (rescheduleEl) rescheduleEl.textContent = analysis.reschedulingCount;
+  }
+  if (analysis.trafficMetrics) {
+    const trafficEl = document.getElementById('batch-traffic');
+    if (trafficEl) trafficEl.textContent = analysis.trafficMetrics.totalChats;
+  }
+  
   // Render charts
   renderRadarChart('batch-radar', analysis.rubricScores, 'Average Scores');
   
@@ -526,7 +631,7 @@ function displayBatchResults(analysis) {
   renderFunnelChart('batch-funnel', {
     totalChats: analysis.totalSessions,
     confirmedBookings: analysis.completedSessions,
-    conversionRate: analysis.successRate
+    conversionRate: analysis.conversionRate || analysis.successRate
   });
   
   // Render sentiment breakdown chart
@@ -543,14 +648,32 @@ function displayBatchResults(analysis) {
     longSessions: analysis.longSessions
   });
   
-  // Render word cloud
-  renderWordCloud(analysis.wordFreq);
+  // Render trend analysis if available
+  if (analysis.trendData && analysis.trendData.dates && analysis.trendData.dates.length > 0) {
+    renderTrendAnalysisChart('batch-trend-analysis', analysis.trendData);
+  }
+  
+  // Render appointment types chart if available
+  if (analysis.appointmentTypes && Object.keys(analysis.appointmentTypes).length > 0) {
+    renderAppointmentTypesChart('batch-appointment-types', analysis.appointmentTypes);
+  }
+  
+  // Render word cloud with time filter
+  renderWordCloud(analysis.wordFreq, analysis.wordCloudByTime);
+  
+  // Render knowledge base gaps if available
+  if (analysis.knowledgeBaseGaps && analysis.knowledgeBaseGaps.length > 0) {
+    renderKnowledgeBaseGaps(analysis.knowledgeBaseGaps);
+  }
   
   // Render AI insights
   renderBatchAIInsights(analysis);
   
   // Render session list
   renderSessionList(analysis.sessions);
+  
+  // Store analysis for export
+  window.currentBatchAnalysis = analysis;
   
   document.getElementById('batch-results').classList.remove('hidden');
 }
@@ -831,31 +954,34 @@ function renderTrendAnalysisChart(canvasId, trendData) {
   charts[canvasId] = new Chart(ctx, {
     type: 'line',
     data: {
-      labels: trendData.months,
+      labels: trendData.dates || trendData.months || [],
       datasets: [
         {
-          label: 'Success Rate (%)',
-          data: trendData.successRates,
+          label: 'Conversion Rate (%)',
+          data: trendData.conversionRates || trendData.successRates || [],
           borderColor: 'rgba(34, 197, 94, 1)',
           backgroundColor: 'rgba(34, 197, 94, 0.1)',
           tension: 0.4,
-          yAxisID: 'y'
+          yAxisID: 'y',
+          fill: true
         },
         {
-          label: 'Avg Turns',
-          data: trendData.avgTurns,
+          label: 'Total Sessions',
+          data: trendData.sessions || trendData.avgTurns || [],
           borderColor: 'rgba(59, 130, 246, 1)',
           backgroundColor: 'rgba(59, 130, 246, 0.1)',
           tension: 0.4,
-          yAxisID: 'y1'
+          yAxisID: 'y1',
+          fill: true
         },
         {
-          label: 'Positive Sentiment (%)',
-          data: trendData.sentimentRates,
+          label: 'Completed Sessions',
+          data: trendData.completed || trendData.sentimentRates || [],
           borderColor: 'rgba(168, 85, 247, 1)',
           backgroundColor: 'rgba(168, 85, 247, 0.1)',
           tension: 0.4,
-          yAxisID: 'y'
+          yAxisID: 'y1',
+          fill: true
         }
       ]
     },
@@ -870,8 +996,11 @@ function renderTrendAnalysisChart(canvasId, trendData) {
           display: true,
           title: {
             display: true,
-            text: 'Month'
-          }
+            text: 'Date',
+            color: '#f1f5f9'
+          },
+          ticks: { color: '#94a3b8' },
+          grid: { color: 'rgba(148,163,184,0.1)' }
         },
         y: {
           type: 'linear',
@@ -879,10 +1008,13 @@ function renderTrendAnalysisChart(canvasId, trendData) {
           position: 'left',
           title: {
             display: true,
-            text: 'Percentage (%)'
+            text: 'Conversion Rate (%)',
+            color: '#f1f5f9'
           },
           min: 0,
-          max: 100
+          max: 100,
+          ticks: { color: '#94a3b8' },
+          grid: { color: 'rgba(148,163,184,0.1)' }
         },
         y1: {
           type: 'linear',
@@ -890,9 +1022,11 @@ function renderTrendAnalysisChart(canvasId, trendData) {
           position: 'right',
           title: {
             display: true,
-            text: 'Average Turns'
+            text: 'Session Count',
+            color: '#f1f5f9'
           },
           min: 0,
+          ticks: { color: '#94a3b8' },
           grid: {
             drawOnChartArea: false,
           },
@@ -901,9 +1035,15 @@ function renderTrendAnalysisChart(canvasId, trendData) {
       plugins: {
         legend: {
           display: true,
-          position: 'top'
+          position: 'top',
+          labels: { color: '#f1f5f9' }
         },
         tooltip: {
+          backgroundColor: 'rgba(15,23,42,0.9)',
+          titleColor: '#f1f5f9',
+          bodyColor: '#f1f5f9',
+          borderColor: 'rgba(59,130,246,0.3)',
+          borderWidth: 1,
           callbacks: {
             label: function(context) {
               let label = context.dataset.label || '';
@@ -912,10 +1052,10 @@ function renderTrendAnalysisChart(canvasId, trendData) {
               }
               if (context.parsed.y !== null) {
                 label += context.parsed.y;
-                if (context.dataset.label === 'Avg Turns') {
-                  label += ' turns';
-                } else {
+                if (context.dataset.label === 'Conversion Rate (%)') {
                   label += '%';
+                } else {
+                  label += ' sessions';
                 }
               }
               return label;
@@ -927,7 +1067,143 @@ function renderTrendAnalysisChart(canvasId, trendData) {
   });
 }
 
-function renderWordCloud(wordFreq) {
+function renderAppointmentTypesChart(canvasId, appointmentTypes) {
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  
+  if (charts[canvasId]) charts[canvasId].destroy();
+  
+  const labels = Object.keys(appointmentTypes);
+  const data = Object.values(appointmentTypes);
+  
+  charts[canvasId] = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Appointment Types',
+        data: data,
+        backgroundColor: [
+          'rgba(59, 130, 246, 0.6)',
+          'rgba(34, 197, 94, 0.6)',
+          'rgba(250, 204, 21, 0.6)',
+          'rgba(239, 68, 68, 0.6)',
+          'rgba(168, 85, 247, 0.6)',
+          'rgba(236, 72, 153, 0.6)',
+          'rgba(14, 165, 233, 0.6)',
+          'rgba(251, 146, 60, 0.6)'
+        ],
+        borderColor: [
+          'rgba(59, 130, 246, 1)',
+          'rgba(34, 197, 94, 1)',
+          'rgba(250, 204, 21, 1)',
+          'rgba(239, 68, 68, 1)',
+          'rgba(168, 85, 247, 1)',
+          'rgba(236, 72, 153, 1)',
+          'rgba(14, 165, 233, 1)',
+          'rgba(251, 146, 60, 1)'
+        ],
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: {
+          display: true,
+          position: 'right',
+          labels: { color: '#f1f5f9' }
+        },
+        tooltip: {
+          backgroundColor: 'rgba(15,23,42,0.9)',
+          titleColor: '#f1f5f9',
+          bodyColor: '#f1f5f9',
+          borderColor: 'rgba(59,130,246,0.3)',
+          borderWidth: 1,
+          callbacks: {
+            label: function(context) {
+              const label = context.label || '';
+              const value = context.parsed || 0;
+              const total = data.reduce((a, b) => a + b, 0);
+              const percentage = ((value / total) * 100).toFixed(1);
+              return `${label}: ${value} (${percentage}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+function renderKnowledgeBaseGaps(gaps) {
+  const container = document.getElementById('knowledge-base-gaps');
+  if (!container) return;
+  
+  container.innerHTML = '';
+  
+  if (!gaps || gaps.length === 0) {
+    container.innerHTML = '<div style="color: #94a3b8;">No knowledge base gaps detected</div>';
+    return;
+  }
+  
+  const gapsList = document.createElement('div');
+  gapsList.style.display = 'grid';
+  gapsList.style.gap = '12px';
+  
+  gaps.slice(0, 10).forEach((gap, index) => {
+    const gapCard = document.createElement('div');
+    gapCard.style.background = 'rgba(239, 68, 68, 0.1)';
+    gapCard.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+    gapCard.style.borderRadius = '8px';
+    gapCard.style.padding = '12px';
+    gapCard.innerHTML = `
+      <div style="font-weight: 600; color: #ef4444; margin-bottom: 4px;">Gap #${index + 1}</div>
+      <div style="color: #f1f5f9; margin-bottom: 4px;"><strong>Query:</strong> "${gap.query || 'N/A'}"</div>
+      <div style="color: #94a3b8; font-size: 12px;">
+        <strong>Session:</strong> ${gap.session_id || 'N/A'} | 
+        <strong>Suggested Topic:</strong> ${gap.suggested_topic || 'General information'}
+      </div>
+    `;
+    gapsList.appendChild(gapCard);
+  });
+  
+  container.appendChild(gapsList);
+}
+
+async function exportToPowerBI() {
+  if (!window.currentBatchAnalysis || !currentBatchData) {
+    alert('Please analyze batch data first');
+    return;
+  }
+  
+  try {
+    const response = await fetch('http://localhost:8000/export/powerbi', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(currentBatchData)
+    });
+    
+    if (response.ok) {
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'chatbot_analytics.csv';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } else {
+      alert('Error exporting data');
+    }
+  } catch (e) {
+    console.error('Export error:', e);
+    alert('Error exporting data. Make sure backend is running.');
+  }
+}
+
+function renderWordCloud(wordFreq, wordCloudByTime = null) {
   const container = document.getElementById('wordCloud');
   container.innerHTML = '';
   
@@ -936,9 +1212,52 @@ function renderWordCloud(wordFreq) {
     return;
   }
   
+  // Add time filter if available
+  if (wordCloudByTime && Object.keys(wordCloudByTime).length > 0) {
+    const filterContainer = document.createElement('div');
+    filterContainer.style.marginBottom = '16px';
+    filterContainer.innerHTML = `
+      <label style="color: #94a3b8; margin-right: 8px;">Filter by month:</label>
+      <select id="wordCloudTimeFilter" style="background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border); border-radius: 8px; padding: 8px; color: var(--text);">
+        <option value="all">All Time</option>
+        ${Object.keys(wordCloudByTime).sort().reverse().map(month => 
+          `<option value="${month}">${month}</option>`
+        ).join('')}
+      </select>
+    `;
+    container.appendChild(filterContainer);
+    
+    const filterSelect = document.getElementById('wordCloudTimeFilter');
+    const contentDiv = document.createElement('div');
+    contentDiv.id = 'wordCloudContent';
+    container.appendChild(contentDiv);
+    renderWordCloudContent(contentDiv, wordFreq);
+    
+    filterSelect.onchange = function() {
+      const selectedMonth = this.value;
+      const filteredFreq = selectedMonth === 'all' ? wordFreq : wordCloudByTime[selectedMonth] || {};
+      const contentDiv = document.getElementById('wordCloudContent');
+      if (contentDiv) {
+        renderWordCloudContent(contentDiv, filteredFreq);
+      }
+    };
+  } else {
+    renderWordCloudContent(container, wordFreq);
+  }
+}
+
+function renderWordCloudContent(container, wordFreq) {
+  // Always clear the container before rendering new content
+  container.innerHTML = '';
+  
   const sortedWords = Object.entries(wordFreq)
     .sort(([,a], [,b]) => b - a)
     .slice(0, 30); // Top 30 words
+  
+  if (sortedWords.length === 0) {
+    container.innerHTML = '<div style="color: #94a3b8;">No word data for selected period</div>';
+    return;
+  }
   
   const maxFreq = Math.max(...sortedWords.map(([,freq]) => freq));
   
@@ -1156,6 +1475,49 @@ function renderBatchAIInsights(analysis) {
   } else if (completionRate > 70) {
     insights.push("🚀 <strong>Optimization Phase:</strong> " + completionRate + "% completion rate is strong. Focus on optimization: reduce session length, improve user satisfaction, and add advanced features like scheduling preferences.");
   }
+  
+  // 9. Appointment Type Analysis & Knowledge Base Optimization
+  if (analysis.appointmentTypes && Object.keys(analysis.appointmentTypes).length > 0) {
+    const topAppointmentType = Object.entries(analysis.appointmentTypes)
+      .sort(([,a], [,b]) => b - a)[0];
+    if (topAppointmentType) {
+      insights.push("🏥 <strong>Appointment Type Insights:</strong> '" + topAppointmentType[0] + "' is the most requested appointment type (" + topAppointmentType[1] + " requests). <strong>Optimize your GenAI knowledge base</strong> to provide comprehensive information about this specialty. Currently your chatbot is rule-based (one point to next), but you can enhance it with better FAQ coverage for popular appointment types.");
+    }
+    
+    const appointmentTypeCount = Object.keys(analysis.appointmentTypes).length;
+    if (appointmentTypeCount > 5) {
+      insights.push("📚 <strong>Knowledge Base Diversification:</strong> Users are booking " + appointmentTypeCount + " different appointment types. Ensure your knowledge base covers all these specialties with detailed FAQs and appointment booking information.");
+    }
+  }
+  
+  // 10. Knowledge Base Gap Analysis
+  if (analysis.knowledgeBaseGaps && analysis.knowledgeBaseGaps.length > 0) {
+    insights.push("🔍 <strong>Knowledge Base Gaps Detected:</strong> " + analysis.knowledgeBaseGaps.length + " out-of-scope queries found. <strong>Constantly update your knowledge base</strong> - when questions are out of scope, the chatbot can't answer them. Review the gap analysis section to identify topics to add to your FAQ and knowledge base.");
+    
+    const uniqueGapTopics = new Set(analysis.knowledgeBaseGaps.map(gap => gap.suggested_topic));
+    if (uniqueGapTopics.size > 0) {
+      insights.push("💡 <strong>Recommended Knowledge Base Updates:</strong> Add content for: " + Array.from(uniqueGapTopics).join(', ') + ". This will reduce out-of-scope queries and improve user satisfaction.");
+    }
+  }
+  
+  // 11. Rescheduling Analysis
+  if (analysis.reschedulingCount !== undefined && analysis.reschedulingCount > 0) {
+    const reschedulingRate = ((analysis.reschedulingCount / totalSessions) * 100).toFixed(1);
+    insights.push("🔄 <strong>Rescheduling Activity:</strong> " + analysis.reschedulingCount + " sessions (" + reschedulingRate + "%) involved rescheduling. This indicates users need flexibility. Ensure your chatbot can easily facilitate rescheduling - this is a key feature for appointment management.");
+  }
+  
+  // 12. Trend Analysis Recommendations
+  if (analysis.trendData && analysis.trendData.conversionRates && analysis.trendData.conversionRates.length > 1) {
+    const recentRate = analysis.trendData.conversionRates[analysis.trendData.conversionRates.length - 1];
+    const earlierRate = analysis.trendData.conversionRates[0];
+    if (recentRate > earlierRate) {
+      const improvement = (recentRate - earlierRate).toFixed(1);
+      insights.push("📈 <strong>Growing Conversion Rate:</strong> Conversion rate has improved by " + improvement + "% over time. This indicates your chatbot optimizations are working! Continue monitoring trends to maximize conversion rates.");
+    } else if (recentRate < earlierRate) {
+      const decline = (earlierRate - recentRate).toFixed(1);
+      insights.push("⚠️ <strong>Declining Conversion Rate:</strong> Conversion rate has decreased by " + decline + "% over time. Investigate recent changes and identify what's causing the drop. Check trend analysis chart for specific dates.");
+    }
+  }
 
   if (insights.length === 0) {
     container.innerHTML = '<div style="color: #94a3b8;">No specific insights generated for this batch.</div>';
@@ -1184,6 +1546,540 @@ function renderTimeline(containerId, turns) {
     
     container.appendChild(item);
   });
+}
+
+// Guardrails functions
+async function evaluateGuardrailsSingle() {
+  const input = document.getElementById('singleInput').value.trim();
+  if (!input) {
+    alert('Please analyze a single session first or paste session JSON');
+    return;
+  }
+  
+  try {
+    const sessionData = JSON.parse(input);
+    const response = await fetch('http://localhost:8000/guardrails/evaluate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(sessionData)
+    });
+    
+    if (response.ok) {
+      const metrics = await response.json();
+      displayGuardrailsResults(metrics);
+    } else {
+      alert('Error evaluating guardrails');
+    }
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+async function evaluateGuardrailsBatch() {
+  if (!currentBatchData) {
+    alert('Please analyze batch data first');
+    return;
+  }
+  
+  try {
+    // Ensure data is in correct format
+    if (!Array.isArray(currentBatchData)) {
+      alert('Batch data is not in the correct format. Please analyze batch data again.');
+      return;
+    }
+    
+    if (currentBatchData.length === 0) {
+      alert('No batch data available. Please analyze batch data first.');
+      return;
+    }
+    
+    const batchRequest = { chatlogs: currentBatchData };
+    const response = await fetch('http://localhost:8000/guardrails/evaluate_batch', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(batchRequest)
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      displayGuardrailsBatchResults(result);
+    } else {
+      const errorText = await response.text();
+      console.error('Guardrails error:', errorText);
+      alert('Error evaluating guardrails: ' + (errorText || response.statusText));
+    }
+  } catch (e) {
+    console.error('Guardrails fetch error:', e);
+    alert('Error connecting to backend: ' + e.message + '\n\nMake sure the backend is running on http://localhost:8000');
+  }
+}
+
+function displayGuardrailsResults(metrics) {
+  const container = document.getElementById('guardrails-content');
+  const resultsDiv = document.getElementById('guardrails-results');
+  
+  // Tooltip explanations
+  const guardrailExplanations = {
+    'Safety Check': 'Detects harmful content, self-harm indicators, and inappropriate language. Critical for healthcare applications.',
+    'PII Protection': 'Prevents leakage of personally identifiable information (SSN, phone, email, credit card) in bot responses.',
+    'Medical Accuracy': 'Ensures appropriate medical language and avoids making guarantees or promises about treatment outcomes.',
+    'Relevance Check': 'Measures if bot responses are relevant to user queries using keyword overlap analysis.',
+    'Coherence Check': 'Ensures logical flow and consistency in conversations, detecting topic changes and contradictions.',
+    'Completeness Check': 'Verifies bot provides complete information including greeting, confirmation, details, and next steps.',
+    'Efficiency Check': 'Measures conversation efficiency based on turn count. Fewer turns for completed sessions = higher efficiency.'
+  };
+  
+  let html = `
+    <div class="kpis">
+      <div class="kpi tooltip">
+        <div class="kpi-label">Overall Guardrail Score</div>
+        <div class="kpi-value">${metrics.overall_score.toFixed(1)}%</div>
+        <span class="tooltiptext">Average score across all 7 guardrail checks. Higher is better - aim for 80%+.</span>
+      </div>
+      <div class="kpi tooltip">
+        <div class="kpi-label">Passed</div>
+        <div class="kpi-value">${metrics.passed_count}/${metrics.total_guardrails}</div>
+        <span class="tooltiptext">Number of guardrail checks that passed (score >= 70%) out of total guardrails evaluated.</span>
+      </div>
+      <div class="kpi tooltip">
+        <div class="kpi-label">Failed</div>
+        <div class="kpi-value">${metrics.failed_count}</div>
+        <span class="tooltiptext">Number of guardrail checks that failed (score < 70%). These need attention.</span>
+      </div>
+    </div>
+    
+    <h4>Category Scores</h4>
+    <div class="kpis">
+  `;
+  
+  const categoryTooltips = {
+    'Safety': 'Combined score for Safety Check and PII Protection. Critical for healthcare - should be 100%.',
+    'Accuracy': 'Medical Accuracy score. Ensures appropriate medical language. Target: 85%+.',
+    'Quality': 'Average of Relevance, Coherence, and Completeness checks. Measures response quality. Target: 75%+.',
+    'Efficiency': 'Efficiency Check score. Measures conversation turn count optimization. Target: 70%+.'
+  };
+  
+  for (const [category, score] of Object.entries(metrics.category_scores)) {
+    const categoryName = category.charAt(0).toUpperCase() + category.slice(1);
+    const tooltipText = categoryTooltips[categoryName] || `Average score for ${categoryName} category.`;
+    html += `
+      <div class="kpi tooltip">
+        <div class="kpi-label">${categoryName}</div>
+        <div class="kpi-value">${score.toFixed(1)}%</div>
+        <span class="tooltiptext">${tooltipText}</span>
+      </div>
+    `;
+  }
+  
+  html += `</div><h4>Individual Guardrails</h4><div style="display: grid; gap: 12px;">`;
+  
+  for (const result of metrics.guardrail_results) {
+    const status = result.passed ? '✅' : '❌';
+    const color = result.passed ? '#10b981' : '#ef4444';
+    const explanation = guardrailExplanations[result.name] || 'Guardrail check for this session.';
+    html += `
+      <div style="background: rgba(15, 23, 42, 0.5); border: 1px solid ${color}; border-radius: 8px; padding: 12px;" class="tooltip">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <strong>${status} ${result.name}</strong>
+            <div style="color: #94a3b8; font-size: 12px; margin-top: 4px;">${result.message}</div>
+          </div>
+          <div style="font-size: 18px; color: ${color};">${result.score.toFixed(1)}%</div>
+        </div>
+        <span class="tooltiptext" style="width: 300px; white-space: normal;">${explanation}</span>
+      </div>
+    `;
+  }
+  
+  html += `</div>`;
+  container.innerHTML = html;
+  resultsDiv.classList.remove('hidden');
+}
+
+function displayGuardrailsBatchResults(result) {
+  const container = document.getElementById('guardrails-content');
+  const resultsDiv = document.getElementById('guardrails-results');
+  
+  const batch = result.batch_metrics;
+  
+  // Tooltip explanations for each metric
+  const tooltips = {
+    'Overall Score': 'Average score across all 7 guardrail checks (Safety, PII Protection, Medical Accuracy, Relevance, Coherence, Completeness, Efficiency). Higher is better - aim for 80%+.',
+    'Passed Rate': 'Percentage of sessions that passed at least 70% of guardrail checks. Indicates overall system quality and reliability.',
+    'Total Sessions': 'Total number of chat sessions evaluated in this batch.',
+    'Safety': 'Measures safety checks (harmful content detection) and PII protection (data privacy). Critical for healthcare - should be 100%.',
+    'Accuracy': 'Measures medical language appropriateness and ensures the bot avoids making guarantees. Should be 85%+ for healthcare applications.',
+    'Quality': 'Combined score for Relevance (response relevance to queries), Coherence (logical flow), and Completeness (information completeness). Target: 75%+.',
+    'Efficiency': 'Measures conversation efficiency based on turn count. Lower turn counts for completed sessions = higher efficiency. Target: 70%+.'
+  };
+  
+  let html = `
+    <h4>Batch Guardrails Summary</h4>
+    <div class="kpis">
+      <div class="kpi tooltip">
+        <div class="kpi-label">Overall Score</div>
+        <div class="kpi-value">${batch.overall_score.toFixed(1)}%</div>
+        <span class="tooltiptext">${tooltips['Overall Score']}</span>
+      </div>
+      <div class="kpi tooltip">
+        <div class="kpi-label">Passed Rate</div>
+        <div class="kpi-value">${batch.passed_rate.toFixed(1)}%</div>
+        <span class="tooltiptext">${tooltips['Passed Rate']}</span>
+      </div>
+      <div class="kpi tooltip">
+        <div class="kpi-label">Total Sessions</div>
+        <div class="kpi-value">${batch.total_sessions}</div>
+        <span class="tooltiptext">${tooltips['Total Sessions']}</span>
+      </div>
+    </div>
+    
+    <h4>Category Averages</h4>
+    <div class="kpis">
+  `;
+  
+  for (const [category, score] of Object.entries(batch.category_scores)) {
+    const categoryName = category.charAt(0).toUpperCase() + category.slice(1);
+    const tooltipText = tooltips[categoryName] || `Average score for ${categoryName} category guardrails.`;
+    html += `
+      <div class="kpi tooltip">
+        <div class="kpi-label">${categoryName}</div>
+        <div class="kpi-value">${score.toFixed(1)}%</div>
+        <span class="tooltiptext">${tooltipText}</span>
+      </div>
+    `;
+  }
+  
+  html += `</div>`;
+  container.innerHTML = html;
+  resultsDiv.classList.remove('hidden');
+}
+
+// Experiment functions
+async function setBaseline() {
+  if (!window.currentBatchAnalysis) {
+    alert('Please analyze batch data first to set baseline');
+    return;
+  }
+  
+  const analysis = window.currentBatchAnalysis;
+  
+  // Get guardrails data if available
+  let guardrailScores = {};
+  let overallGuardrailScore = 0.0;
+  
+  try {
+    const guardrailsResponse = await fetch('http://localhost:8000/guardrails/evaluate_batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatlogs: currentBatchData })
+    });
+    
+    if (guardrailsResponse.ok) {
+      const guardrailsData = await guardrailsResponse.json();
+      guardrailScores = guardrailsData.batch_metrics.category_scores;
+      overallGuardrailScore = guardrailsData.batch_metrics.overall_score;
+    }
+  } catch (e) {
+    console.log('Could not fetch guardrails data');
+  }
+  
+  const baselineData = {
+    pipeline_version: 'v1.0.0',
+    changes: [{
+      change_id: 'baseline_1',
+      timestamp: new Date().toISOString(),
+      description: 'Initial baseline measurement',
+      category: 'baseline',
+      details: {}
+    }],
+    guardrail_scores: guardrailScores,
+    overall_guardrail_score: overallGuardrailScore,
+    completion_rate: analysis.successRate || analysis.conversionRate || 0,
+    avg_turns: parseFloat(analysis.avgTurns) || 0,
+    sentiment_rate: analysis.sentimentRate || 0,
+    efficiency_score: analysis.rubricScores?.efficiency || 0,
+    session_count: analysis.totalSessions || 0,
+    notes: 'Baseline performance measurement'
+  };
+  
+  try {
+    const response = await fetch('http://localhost:8000/experiments/baseline', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(baselineData)
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      alert('Baseline set successfully!');
+      loadExperiments();
+    } else {
+      alert('Error setting baseline');
+    }
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+async function createExperiment() {
+  const pipelineVersion = prompt('Enter pipeline version (e.g., v1.1.0):', 'v1.1.0');
+  if (!pipelineVersion) return;
+  
+  const changeDescription = prompt('Describe the change made:');
+  if (!changeDescription) return;
+  
+  const changeCategory = prompt('Enter category (prompt_engineering, guardrails, response_format, knowledge_base):', 'prompt_engineering');
+  
+  if (!window.currentBatchAnalysis) {
+    alert('Please analyze batch data first');
+    return;
+  }
+  
+  const analysis = window.currentBatchAnalysis;
+  
+  // Get guardrails data
+  let guardrailScores = {};
+  let overallGuardrailScore = 0.0;
+  
+  try {
+    const guardrailsResponse = await fetch('http://localhost:8000/guardrails/evaluate_batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatlogs: currentBatchData })
+    });
+    
+    if (guardrailsResponse.ok) {
+      const guardrailsData = await guardrailsResponse.json();
+      guardrailScores = guardrailsData.batch_metrics.category_scores;
+      overallGuardrailScore = guardrailsData.batch_metrics.overall_score;
+    }
+  } catch (e) {
+    console.log('Could not fetch guardrails data');
+  }
+  
+  const experimentData = {
+    pipeline_version: pipelineVersion,
+    changes: [{
+      change_id: `change_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      description: changeDescription,
+      category: changeCategory,
+      details: {}
+    }],
+    guardrail_scores: guardrailScores,
+    overall_guardrail_score: overallGuardrailScore,
+    completion_rate: analysis.successRate || analysis.conversionRate || 0,
+    avg_turns: parseFloat(analysis.avgTurns) || 0,
+    sentiment_rate: analysis.sentimentRate || 0,
+    efficiency_score: analysis.rubricScores?.efficiency || 0,
+    session_count: analysis.totalSessions || 0,
+    notes: prompt('Additional notes (optional):') || '',
+    trade_offs: []
+  };
+  
+  try {
+    const response = await fetch('http://localhost:8000/experiments/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(experimentData)
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      alert('Experiment created successfully!');
+      loadExperiments();
+    } else {
+      alert('Error creating experiment');
+    }
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+async function loadExperiments() {
+  try {
+    const response = await fetch('http://localhost:8000/experiments/list');
+    
+    if (response.ok) {
+      const data = await response.json();
+      displayExperiments(data);
+    } else {
+      alert('Error loading experiments');
+    }
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+function displayExperiments(data) {
+  const container = document.getElementById('experiments-content');
+  
+  let html = '';
+  
+  if (data.baseline) {
+    html += `
+      <h4>📊 Baseline Experiment</h4>
+      <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid #3b82f6; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+        <div><strong>ID:</strong> ${data.baseline.experiment_id}</div>
+        <div><strong>Timestamp:</strong> ${new Date(data.baseline.timestamp).toLocaleString()}</div>
+        <div><strong>Pipeline Version:</strong> ${data.baseline.pipeline_version}</div>
+        <div class="kpis" style="margin-top: 12px;">
+          <div class="kpi">
+            <div class="kpi-label">Guardrail Score</div>
+            <div class="kpi-value">${data.baseline.overall_guardrail_score.toFixed(1)}%</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Completion Rate</div>
+            <div class="kpi-value">${data.baseline.completion_rate.toFixed(1)}%</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Avg Turns</div>
+            <div class="kpi-value">${data.baseline.avg_turns.toFixed(1)}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  
+  if (data.experiments && data.experiments.length > 0) {
+    html += `<h4>🧪 Experiments (${data.experiments.length})</h4>`;
+    
+    for (const exp of data.experiments) {
+      const improvements = exp.improvement || {};
+      let improvementHtml = '';
+      
+      for (const [metric, change] of Object.entries(improvements)) {
+        const sign = change > 0 ? '+' : '';
+        const color = change > 0 ? '#10b981' : change < 0 ? '#ef4444' : '#94a3b8';
+        improvementHtml += `<span style="color: ${color}; margin-right: 8px;">${metric}: ${sign}${change.toFixed(2)}</span>`;
+      }
+      
+      html += `
+        <div style="background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+          <div><strong>ID:</strong> ${exp.experiment_id}</div>
+          <div><strong>Version:</strong> ${exp.pipeline_version}</div>
+          <div><strong>Timestamp:</strong> ${new Date(exp.timestamp).toLocaleString()}</div>
+          <div><strong>Changes:</strong> ${exp.changes.map(c => c.description).join(', ')}</div>
+          <div class="kpis" style="margin-top: 12px;">
+            <div class="kpi">
+              <div class="kpi-label">Guardrail Score</div>
+              <div class="kpi-value">${exp.overall_guardrail_score.toFixed(1)}%</div>
+            </div>
+            <div class="kpi">
+              <div class="kpi-label">Completion Rate</div>
+              <div class="kpi-value">${exp.completion_rate.toFixed(1)}%</div>
+            </div>
+          </div>
+          ${improvementHtml ? `<div style="margin-top: 8px;"><strong>Improvements:</strong> ${improvementHtml}</div>` : ''}
+          ${exp.notes ? `<div style="margin-top: 8px; color: #94a3b8;"><em>${exp.notes}</em></div>` : ''}
+        </div>
+      `;
+    }
+  } else {
+    html += '<div style="color: #94a3b8;">No experiments yet. Create one to start tracking improvements.</div>';
+  }
+  
+  container.innerHTML = html;
+}
+
+async function generateReport() {
+  try {
+    // Get experiments data
+    const experimentsResponse = await fetch('http://localhost:8000/experiments/list');
+    if (!experimentsResponse.ok) {
+      alert('Error loading experiments');
+      return;
+    }
+    
+    const experimentsData = await experimentsResponse.json();
+    
+    if (!experimentsData.baseline) {
+      alert('Please set a baseline first');
+      return;
+    }
+    
+    const reportData = {
+      guardrails_config: {
+        description: "LLM Guardrails for Healthcare Chatbot",
+        categories: ["safety", "accuracy", "quality", "efficiency"]
+      },
+      baseline_experiment: experimentsData.baseline,
+      experiments: experimentsData.experiments || [],
+      pipeline_description: "Healthcare Chatbot Evaluation Framework with LLM Guardrails and Experimentation"
+    };
+    
+    const response = await fetch('http://localhost:8000/reports/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(reportData)
+    });
+    
+    if (response.ok) {
+      const report = await response.json();
+      
+      // Display report
+      const container = document.getElementById('experiments-content');
+      let html = '<h4>📄 Final Report Generated</h4>';
+      html += '<div style="background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border); border-radius: 8px; padding: 16px; max-height: 600px; overflow-y: auto;">';
+      html += `<pre style="color: #f1f5f9; white-space: pre-wrap;">${JSON.stringify(report, null, 2)}</pre>`;
+      html += '</div>';
+      html += '<button onclick="exportReport()" style="margin-top: 16px;">💾 Export Report</button>';
+      container.innerHTML = html;
+      
+      // Store report for export
+      window.currentReport = report;
+      window.currentReportData = reportData;
+    } else {
+      alert('Error generating report');
+    }
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+async function exportReport() {
+  if (!window.currentReportData) {
+    alert('Please generate a report first');
+    return;
+  }
+  
+  try {
+    // Export as JSON
+    const jsonResponse = await fetch('http://localhost:8000/reports/export_json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(window.currentReport)
+    });
+    
+    if (jsonResponse.ok) {
+      const blob = await jsonResponse.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'final_report.json';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    }
+    
+    // Export as Markdown
+    const mdResponse = await fetch('http://localhost:8000/reports/export_markdown', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(window.currentReport)
+    });
+    
+    if (mdResponse.ok) {
+      alert('Report exported successfully! Check your downloads folder.');
+    }
+  } catch (e) {
+    alert('Error exporting report: ' + e.message);
+  }
 }
 
 // Initialize

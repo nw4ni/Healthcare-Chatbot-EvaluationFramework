@@ -15,6 +15,8 @@
   <div class="view-selector">
     <button class="view-btn active" onclick="switchView('single')">🔍 Single Session</button>
     <button class="view-btn" onclick="switchView('batch')">📊 Batch Analysis</button>
+    <button class="view-btn" onclick="switchView('guardrails')">🛡️ Guardrails</button>
+    <button class="view-btn" onclick="switchView('experiments')">🧪 Experiments</button>
   </div>
 
   <!-- Single Session View -->
@@ -121,20 +123,41 @@
           <span class="tooltiptext">Percentage of sessions that successfully completed appointment booking</span>
         </div>
         <div class="kpi tooltip">
+          <div class="kpi-label">📈 Conversion Rate</div>
+          <div class="kpi-value" id="batch-conversion">–</div>
+          <span class="tooltiptext">Percentage of chat sessions that converted to successful appointment bookings. Higher is better - indicates effective chatbot performance.</span>
+        </div>
+        <div class="kpi tooltip">
+          <div class="kpi-label">🚦 Chatbot Traffic</div>
+          <div class="kpi-value" id="batch-traffic">–</div>
+          <span class="tooltiptext">Total number of chat sessions/interactions. Tracks overall chatbot usage and engagement volume.</span>
+        </div>
+        <div class="kpi tooltip">
+          <div class="kpi-label">🔄 Rescheduling Count</div>
+          <div class="kpi-value" id="batch-rescheduling">–</div>
+          <span class="tooltiptext">Number of sessions where users requested to reschedule appointments. Helps identify scheduling flexibility needs.</span>
+        </div>
+        <div class="kpi tooltip">
           <div class="kpi-label">💬 Avg Conversation Length</div>
           <div class="kpi-value" id="batch-turns">–</div>
-          <span class="tooltiptext">Average number of turns (messages) across all conversations</span>
+          <span class="tooltiptext">Average number of turns (messages) across all conversations. Lower values indicate more efficient interactions.</span>
         </div>
         <div class="kpi tooltip">
           <div class="kpi-label">😊 Positive Sentiment Rate</div>
           <div class="kpi-value" id="batch-sentiment">–</div>
-          <span class="tooltiptext">Percentage of sessions ending with positive user sentiment (thanks, great, perfect)</span>
+          <span class="tooltiptext">Percentage of sessions ending with positive user sentiment (thanks, great, perfect). Indicates user satisfaction.</span>
         </div>
         <div class="kpi tooltip">
           <div class="kpi-label">🎯 Avg Overall Score</div>
           <div class="kpi-value" id="batch-score">–</div>
-          <span class="tooltiptext">Average weighted score across all rubric categories for all sessions</span>
+          <span class="tooltiptext">Average weighted score across all rubric categories (satisfaction, coherence, relevance, consistency, adaptability, memory, efficiency)</span>
         </div>
+      </div>
+      
+      <div style="margin: 16px 0; text-align: center;">
+        <button onclick="exportToPowerBI()" class="secondary" style="background: rgba(16, 185, 129, 0.2); border-color: #10b981; color: #10b981;">
+          📊 Export to PowerBI (CSV)
+        </button>
       </div>
       
       <div class="grid">
@@ -154,12 +177,31 @@
           <h4>⏱️ Session Duration Analysis</h4>
           <canvas id="batch-duration-analysis"></canvas>
         </div>
+        <div style="margin-top: 24px;">
+          <h4>📈 Trend Analysis Over Time</h4>
+          <canvas id="batch-trend-analysis"></canvas>
+          <p style="color: #94a3b8; font-size: 12px; margin-top: 8px;">Track conversion rates, traffic, and completion trends over time to identify growth patterns and optimization opportunities</p>
+        </div>
+        <div style="margin-top: 24px;">
+          <h4>🏥 Appointment Types Distribution</h4>
+          <canvas id="batch-appointment-types"></canvas>
+          <p style="color: #94a3b8; font-size: 12px; margin-top: 8px;">See what types of appointments users are booking most frequently. Use this to optimize your GenAI knowledge base content.</p>
+        </div>
       </div>
       
       <div style="margin-top: 24px;">
         <h4>☁️ Word Cloud - Common User Terms</h4>
+        <p style="color: #94a3b8; font-size: 12px; margin-bottom: 8px;">Filter by month to see trending topics (e.g., "flu" in October). Helps identify seasonal patterns and knowledge base update needs.</p>
         <div class="word-cloud" id="wordCloud">
           <div style="color: #94a3b8;">Upload data to see word cloud</div>
+        </div>
+      </div>
+      
+      <div style="margin-top: 24px;">
+        <h4>🔍 Knowledge Base Gap Analysis</h4>
+        <p style="color: #94a3b8; font-size: 12px; margin-bottom: 8px;">Out-of-scope questions that the chatbot couldn't answer. Use this to constantly update your knowledge base and improve coverage.</p>
+        <div id="knowledge-base-gaps" style="background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border); border-radius: 12px; padding: 16px;">
+          <div style="color: #94a3b8;">No gaps detected yet</div>
         </div>
       </div>
       
@@ -171,6 +213,43 @@
       <h3>📋 Session List - Click to View Individual Session</h3>
       <div class="session-list" id="session-list">
         <div style="color: #94a3b8;">No sessions loaded</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Guardrails View -->
+  <div id="guardrails-view" class="view hidden">
+    <div class="card">
+      <h3>🛡️ LLM Guardrails Evaluation</h3>
+      <p>Measure different parts of the workflow to ensure quality and safety</p>
+      
+      <div style="margin: 16px 0;">
+        <button onclick="evaluateGuardrailsSingle()">🔍 Evaluate Single Session</button>
+        <button onclick="evaluateGuardrailsBatch()" class="secondary">📊 Evaluate Batch</button>
+      </div>
+      
+      <div id="guardrails-results" class="hidden">
+        <h4>Guardrails Results</h4>
+        <div id="guardrails-content"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Experiments View -->
+  <div id="experiments-view" class="view hidden">
+    <div class="card">
+      <h3>🧪 Experimentation & Iteration Tracking</h3>
+      <p>Track pipeline changes and their impact on performance</p>
+      
+      <div style="margin: 16px 0;">
+        <button onclick="setBaseline()">📊 Set Baseline</button>
+        <button onclick="createExperiment()" class="secondary">➕ Create Experiment</button>
+        <button onclick="loadExperiments()" class="secondary">📋 View All Experiments</button>
+        <button onclick="generateReport()" class="secondary">📄 Generate Report</button>
+      </div>
+      
+      <div id="experiments-results">
+        <div id="experiments-content"></div>
       </div>
     </div>
   </div>

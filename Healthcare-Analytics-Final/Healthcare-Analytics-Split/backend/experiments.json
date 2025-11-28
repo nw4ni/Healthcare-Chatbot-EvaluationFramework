@@ -1,0 +1,199 @@
+{
+  "experiments": [
+    {
+      "experiment_id": "exp_20251127_222716",
+      "baseline_id": null,
+      "timestamp": "2025-11-27T22:27:16.795216",
+      "pipeline_version": "v1.0.0",
+      "changes": [
+        {
+          "change_id": "baseline_1",
+          "timestamp": "2025-11-27T14:27:16.791Z",
+          "description": "Initial baseline measurement",
+          "category": "baseline",
+          "details": {},
+          "expected_impact": null
+        }
+      ],
+      "guardrail_scores": {
+        "safety": 100.0,
+        "accuracy": 88.1875,
+        "quality": 60.564090608465584,
+        "efficiency": 60.05
+      },
+      "overall_guardrail_score": 75.70425311791385,
+      "completion_rate": 41.0,
+      "avg_turns": 6.3,
+      "sentiment_rate": 38.0,
+      "efficiency_score": 77.0,
+      "improvement": {},
+      "trade_offs": [],
+      "notes": "Baseline performance measurement",
+      "session_count": 2000
+    },
+    {
+      "experiment_id": "exp_20251127_222749",
+      "baseline_id": "exp_20251127_222716",
+      "timestamp": "2025-11-27T22:27:49.140661",
+      "pipeline_version": "v1.1.0",
+      "changes": [
+        {
+          "change_id": "change_1764253666806",
+          "timestamp": "2025-11-27T14:27:46.806Z",
+          "description": "new",
+          "category": "prompt_engineering",
+          "details": {},
+          "expected_impact": null
+        }
+      ],
+      "guardrail_scores": {
+        "safety": 100.0,
+        "accuracy": 88.1875,
+        "quality": 60.564090608465584,
+        "efficiency": 60.05
+      },
+      "overall_guardrail_score": 75.70425311791385,
+      "completion_rate": 41.0,
+      "avg_turns": 6.3,
+      "sentiment_rate": 38.0,
+      "efficiency_score": 77.0,
+      "improvement": {
+        "guardrail_score": 0.0,
+        "completion_rate": 0.0,
+        "avg_turns": 0.0,
+        "sentiment_rate": 0.0,
+        "efficiency_score": 0.0,
+        "guardrail_safety": 0.0,
+        "guardrail_accuracy": 0.0,
+        "guardrail_quality": 0.0,
+        "guardrail_efficiency": 0.0
+      },
+      "trade_offs": [],
+      "notes": "nil",
+      "session_count": 2000
+    },
+    {
+      "experiment_id": "exp_20251127_223556",
+      "baseline_id": "exp_20251127_222716",
+      "timestamp": "2025-11-27T22:35:56.312776",
+      "pipeline_version": "v1.0.0",
+      "changes": [
+        {
+          "change_id": "baseline_1",
+          "timestamp": "2025-11-27T14:35:56.305Z",
+          "description": "Initial baseline measurement",
+          "category": "baseline",
+          "details": {},
+          "expected_impact": null
+        }
+      ],
+      "guardrail_scores": {
+        "safety": 100.0,
+        "accuracy": 88.1875,
+        "quality": 60.564090608465584,
+        "efficiency": 60.05
+      },
+      "overall_guardrail_score": 75.70425311791385,
+      "completion_rate": 41.0,
+      "avg_turns": 6.3,
+      "sentiment_rate": 38.0,
+      "efficiency_score": 77.0,
+      "improvement": {
+        "guardrail_score": 0.0,
+        "completion_rate": 0.0,
+        "avg_turns": 0.0,
+        "sentiment_rate": 0.0,
+        "efficiency_score": 0.0,
+        "guardrail_safety": 0.0,
+        "guardrail_accuracy": 0.0,
+        "guardrail_quality": 0.0,
+        "guardrail_efficiency": 0.0
+      },
+      "trade_offs": [],
+      "notes": "Baseline performance measurement",
+      "session_count": 2000
+    },
+    {
+      "experiment_id": "exp_20251127_225513",
+      "baseline_id": "exp_20251127_223556",
+      "timestamp": "2025-11-27T22:55:13.295947",
+      "pipeline_version": "v1.0.0",
+      "changes": [
+        {
+          "change_id": "baseline_1",
+          "timestamp": "2025-11-27T14:55:13.290Z",
+          "description": "Initial baseline measurement",
+          "category": "baseline",
+          "details": {},
+          "expected_impact": null
+        }
+      ],
+      "guardrail_scores": {
+        "safety": 100.0,
+        "accuracy": 88.1875,
+        "quality": 60.564090608465584,
+        "efficiency": 60.05
+      },
+      "overall_guardrail_score": 75.70425311791385,
+      "completion_rate": 41.0,
+      "avg_turns": 6.3,
+      "sentiment_rate": 38.0,
+      "efficiency_score": 77.0,
+      "improvement": {
+        "guardrail_score": 0.0,
+        "completion_rate": 0.0,
+        "avg_turns": 0.0,
+        "sentiment_rate": 0.0,
+        "efficiency_score": 0.0,
+        "guardrail_safety": 0.0,
+        "guardrail_accuracy": 0.0,
+        "guardrail_quality": 0.0,
+        "guardrail_efficiency": 0.0
+      },
+      "trade_offs": [],
+      "notes": "Baseline performance measurement",
+      "session_count": 2000
+    }
+  ],
+  "baseline": {
+    "experiment_id": "exp_20251127_225513",
+    "baseline_id": "exp_20251127_223556",
+    "timestamp": "2025-11-27T22:55:13.295947",
+    "pipeline_version": "v1.0.0",
+    "changes": [
+      {
+        "change_id": "baseline_1",
+        "timestamp": "2025-11-27T14:55:13.290Z",
+        "description": "Initial baseline measurement",
+        "category": "baseline",
+        "details": {},
+        "expected_impact": null
+      }
+    ],
+    "guardrail_scores": {
+      "safety": 100.0,
+      "accuracy": 88.1875,
+      "quality": 60.564090608465584,
+      "efficiency": 60.05
+    },
+    "overall_guardrail_score": 75.70425311791385,
+    "completion_rate": 41.0,
+    "avg_turns": 6.3,
+    "sentiment_rate": 38.0,
+    "efficiency_score": 77.0,
+    "improvement": {
+      "guardrail_score": 0.0,
+      "completion_rate": 0.0,
+      "avg_turns": 0.0,
+      "sentiment_rate": 0.0,
+      "efficiency_score": 0.0,
+      "guardrail_safety": 0.0,
+      "guardrail_accuracy": 0.0,
+      "guardrail_quality": 0.0,
+      "guardrail_efficiency": 0.0
+    },
+    "trade_offs": [],
+    "notes": "Baseline performance measurement",
+    "session_count": 2000
+  }
+}
